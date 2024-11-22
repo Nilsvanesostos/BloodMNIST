@@ -104,74 +104,79 @@ def dilated_cnn(input_shape, num_classes=8):
 
     return model
 
-def residual_block(x, filters, kernel_size=3, stride=1):
+def bottleneck_block(X, filters, strides=1, downsample=False):
     """
-    A residual block with two convolutional layers.
+    A single bottleneck block for ResNet-50.
     """
-    # Shortcut connection
-    shortcut = x
+    shortcut = X
 
-    # First convolutional layer
-    x = tf.keras.layers.Conv2D(filters, kernel_size=kernel_size, strides=stride, padding='same')(x)
-    x = tf.keras.layers.BatchNormalization()(x)
-    x = tf.keras.layers.Activation('relu')(x)
+    # 1x1 Convolution (reduce dimensions)
+    X = tf.keras.layers.Conv2D(filters, (1, 1), strides=strides, use_bias=False)(X)
+    X = tf.keras.layers.BatchNormalization()(X)
+    X = tf.keras.layers.ReLU()(X)
 
-    # Second convolutional layer
-    x = tf.keras.layers.Conv2D(filters, kernel_size=kernel_size, strides=1, padding='same')(x)
-    x = tf.keras.layers.BatchNormalization()(x)
+    # 3x3 Convolution
+    X = tf.keras.layers.Conv2D(filters, (3, 3), strides=1, padding="same", use_bias=False)(X)
+    X = tf.keras.layers.BatchNormalization()(X)
+    X = tf.keras.layers.ReLU()(X)
 
-    # Adjust shortcut to match shape if needed
-    if shortcut.shape[-1] != filters:  # Check if channels differ
-        shortcut = tf.keras.layers.Conv2D(filters, kernel_size=1, strides=stride, padding='same')(shortcut)
+    # 1x1 Convolution (restore dimensions)
+    X = tf.keras.layers.Conv2D(filters * 4, (1, 1), strides=1, use_bias=False)(X)
+    X = tf.keras.layers.BatchNormalization()(X)
+
+    # Downsample shortcut if needed
+    if downsample:
+        shortcut = tf.keras.layers.Conv2D(filters * 4, (1, 1), strides=strides, use_bias=False)(shortcut)
         shortcut = tf.keras.layers.BatchNormalization()(shortcut)
 
-    # Add shortcut to the main path
-    x = tf.keras.layers.Add()([x, shortcut])
-    x = tf.keras.layers.Activation('relu')(x)
+    # Add shortcut and apply activation
+    X = tf.keras.layers.add([X, shortcut])
+    X = tf.keras.layers.ReLU()(X)
 
-    return x
+    return X
 
 def resnet(input_shape, num_classes=8):
     """
-    Builds a ResNet-like architecture.
+    Builds the ResNet-50 model.
     """
-    X_input = tf.keras.Input(input_shape)
+    inputs = layers.Input(shape=input_shape)
 
     # Initial convolutional layer
-    X = tf.keras.layers.Conv2D(32, (3, 3), strides=1, padding='same')(X_input)
+    X = tf.keras.layers.Conv2D(64, (7, 7), strides=2, padding="same", use_bias=False)(inputs)
     X = tf.keras.layers.BatchNormalization()(X)
-    X = tf.keras.layers.Activation('relu')(X)
+    X = tf.keras.layers.ReLU()(X)
+    X = tf.keras.layers.MaxPooling2D((3, 3), strides=2, padding="same")(X)
 
-    # Residual block 1
-    X = residual_block(X, filters=32)
+    # Residual blocks
+    # Stage 1
+    X = bottleneck_block(X, filters=64, downsample=True)
+    X = bottleneck_block(X, filters=64)
+    X = bottleneck_block(X, filters=64)
 
-    # Residual block 2
-    X = residual_block(X, filters=64)
+    # Stage 2
+    X = bottleneck_block(X, filters=128, strides=2, downsample=True)
+    X = bottleneck_block(X, filters=128)
+    X = bottleneck_block(X, filters=128)
+    X = bottleneck_block(X, filters=128)
 
-    # Residual block 3
-    X = residual_block(X, filters=128)
+    # Stage 3
+    X = bottleneck_block(X, filters=256, strides=2, downsample=True)
+    X = bottleneck_block(X, filters=256)
+    X = bottleneck_block(X, filters=256)
+    X = bottleneck_block(X, filters=256)
+    X = bottleneck_block(X, filters=256)
+    X = bottleneck_block(X, filters=256)
 
-    # Residual block 4
-    X = residual_block(X, filters=256)
+    # Stage 4
+    X = bottleneck_block(X, filters=512, strides=2, downsample=True)
+    X = bottleneck_block(X, filters=512)
+    X = bottleneck_block(X, filters=512)
 
-    # Global Average Pooling
+    # Final layers
     X = tf.keras.layers.GlobalAveragePooling2D()(X)
+    outputs = tf.keras.layers.Dense(num_classes, activation="softmax")(X)
 
-    # Flatten the output to feed into the Dense layer
-    X = tf.keras.layers.Flatten()(X)
-
-    # 1st Fully Connected Layer
-    X = tf.keras.layers.Dense(256, activation='relu')(X)
-
-    # 2nd Fully Connected Layer
-    X = tf.keras.layers.Dense(256, activation='relu')(X)
-
-    # Output Layer
-    X = tf.keras.layers.Dense(num_classes, activation='softmax')(X)
-
-    # Create the model
-    model = tf.keras.Model(inputs = X_input, outputs = X, name='resnet')
-
+    model = tf.keras.Model(inputs, outputs, name="resnet")
     return model
 
 def ConvConvPool(X, filters, conv_kernel=(3,3), conv_strides=(1, 1), conv_padding='same', dilation_rate=(1,1), activation='relu'):
@@ -212,7 +217,7 @@ def vgg(input_shape, num_classes=8):
     X = tf.keras.layers.Dense(256, activation='relu')(X)
 
     # Output Layer
-    X = tf.keras.layers.Dense(num_classes, activation='softmax')(x)
+    X = tf.keras.layers.Dense(num_classes, activation='softmax')(X)
 
     # Create the model
     model = tf.keras.Model(inputs = X_input, outputs = X, name='vgg')
@@ -225,23 +230,27 @@ def autoencoder(input_shape, latent_dim=32):
     """
     # Encoder
     encoder_input = tf.keras.layers.Input(shape=input_shape, name="encoder_input")
-    X = tf.keras.layers.Conv2D(32, (3, 3), activation='relu', padding='same')(encoder_input)
-    X = tf.keras.layers.MaxPooling2D((2, 2), padding='same')(X)
-    X = tf.keras.layers.Conv2D(64, (3, 3), activation='relu', padding='same')(X)
-    X = tf.keras.layers.MaxPooling2D((2, 2), padding='same')(X)
+
+    X = ConvPool(encoder_input, filters=32, conv_kernel=(3, 3), conv_strides=(1, 1), conv_padding='same', activation='elu')
+    X = ConvPool(X, filters=64, conv_kernel=(3, 3), conv_strides=(1, 1), conv_padding='same', activation='elu')
+    X = ConvPool(X, filters=128, conv_kernel=(3, 3), conv_strides=(1, 1), conv_padding='same', activation='elu')
+    X = ConvPool(X, filters=256, conv_kernel=(3, 3), conv_strides=(1, 1), conv_padding='same', activation='elu')
+    
     X = tf.keras.layers.Flatten()(X)
-    latent_output = tf.keras.layers.Dense(latent_dim, activation='relu', name="latent_output")(X)
+    latent_output = tf.keras.layers.Dense(latent_dim, name="latent_output")(X)
 
     # Create the encoder
     encoder = tf.keras.Model(encoder_input, latent_output, name="encoder")
 
     # Decoder
     decoder_input = tf.keras.layers.Input(shape=(latent_dim,), name="decoder_input")
-    X = tf.keras.layers.Dense(16 * 16 * 64, activation='relu')(decoder_input)  # Match flattened size
-    X = tf.keras.layers.Reshape((16, 16, 64))(X)
-    X = tf.keras.layers.Conv2DTranspose(64, (3, 3), activation='relu', padding='same')(X)
-    X = tf.keras.layers.Conv2DTranspose(32, (3, 3), activation='relu', padding='same')(X)
-    decoder_output = tf.keras.layers.Conv2DTranspose(3, (3, 3), activation='sigmoid', padding='same', name="decoder_output")(X)
+
+    X = tf.keras.layers.Dense(4 * 4 * 256, activation='elu')(decoder_input)  # Match the encoder output size
+    X = tf.keras.layers.Reshape((4, 4, 256))(X)
+    X = tf.keras.layers.Conv2DTranspose(128, (3, 3), strides=2, activation='elu', padding='same')(X)  # (8, 8, 128)
+    X = tf.keras.layers.Conv2DTranspose(64, (3, 3), strides=2, activation='elu', padding='same')(X)   # (16, 16, 64)
+    X = tf.keras.layers.Conv2DTranspose(32, (3, 3), strides=2, activation='elu', padding='same')(X)   # (32, 32, 32)
+    decoder_output = tf.keras.layers.Conv2DTranspose(3, (3, 3), strides=2, activation=None, padding='same', name="decoder_output")(X)  # (64, 64, 3)
 
     # Create the decoder
     decoder = tf.keras.Model(decoder_input, decoder_output, name="decoder")
@@ -252,6 +261,7 @@ def autoencoder(input_shape, latent_dim=32):
     autoencoder = tf.keras.Model(autoencoder_input, autoencoder_output, name="autoencoder")
 
     return encoder, decoder, autoencoder
+
 
 def autoclassifier(encoder, num_classes=8):
     """
