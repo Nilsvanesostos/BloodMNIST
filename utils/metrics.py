@@ -2,6 +2,7 @@
 
 import time
 import numpy as np
+import tensorflow as tf
 
 def training_time(train_data, model):
     # Compile the model for training
