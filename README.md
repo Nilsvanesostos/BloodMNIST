@@ -45,8 +45,8 @@ The repository is organized as follows:
 Clone the repository:
 
    ```bash
-   git clone https://github.com/your-repo/blood-cell-classification.git
-   cd blood-cell-classification
+   git clone https://github.com/Nilsvanesostos/BloodMNIST.git
+   cd BloodMNIST
    ```
 
 ---
