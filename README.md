@@ -1,4 +1,4 @@
-# Blood Cell Classification Using Deep Learning
+# Efficient Deep Learning Architectures for Blood Cell Classification
 
 This repository contains the code, utilities, and report for the classification of blood cells from the BloodMNIST dataset. The project focuses on optimizing convolutional neural network (CNN) architectures to achieve high accuracy while maintaining computational efficiency and interpretability.
 
