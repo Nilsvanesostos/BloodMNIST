@@ -77,7 +77,7 @@ def cnn(input_shape, num_classes=8):
 
     return model
 
-def dilated_cnn(input_shape, num_classes=8):
+def dilated(input_shape, num_classes=8):
     """
     Creates a dilated CNN model for image classification.
     
@@ -91,19 +91,19 @@ def dilated_cnn(input_shape, num_classes=8):
     X_input = layers.Input(input_shape)
 
     # 1st Convolution Layer + Pooling
-    X = conv2d_bn(X_input, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', dilation_rate=(3, 3), name='1')
+    X = conv2d_bn(X_input, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', dilation_rate=(1,2), name='1')
     X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
 
     # 2nd Convolutional Layer + Pooling
-    X = conv2d_bn(X, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', dilation_rate=(3, 3), name='2')
+    X = conv2d_bn(X, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', dilation_rate=(1,2), name='2')
     X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
 
     # 3rd Convolutional Layer + Pooling
-    X = conv2d_bn(X, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', dilation_rate=(3, 3), name='3')
+    X = conv2d_bn(X, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', dilation_rate=(1,2), name='3')
     X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
 
     # 4th Convolutional Layer + Pooling
-    X = conv2d_bn(X, filters=256, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', dilation_rate=(3, 3), name='4')
+    X = conv2d_bn(X, filters=256, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', dilation_rate=(1,2), name='4')
     X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
 
     # Flatten the output to feed into the Dense layer
@@ -121,70 +121,117 @@ def dilated_cnn(input_shape, num_classes=8):
 
     return model
 
-def identity_block(x, filter):
-    # copy tensor to variable called x_skip
-    x_skip = x
-    # Layer 1
-    x = layers.Conv2D(filter, (3,3), padding = 'same')(x)
-    x = layers.BatchNormalization(axis=3)(x)
-    x = layers.Activation('relu')(x)
-    # Layer 2
-    x = layers.Conv2D(filter, (3,3), padding = 'same')(x)
-    x = layers.BatchNormalization(axis=3)(x)
-    # Add Residue
-    x = layers.Add()([x, x_skip])     
-    x = layers.Activation('relu')(x)
-    return x
-
-def convolutional_block(x, filter):
-    # copy tensor to variable called x_skip
-    x_skip = x
-    # Layer 1
-    x = layers.Conv2D(filter, (3,3), padding = 'same', strides = (2,2))(x)
-    x = layers.BatchNormalization(axis=3)(x)
-    x = layers.Activation('relu')(x)
-    # Layer 2
-    x = layers.Conv2D(filter, (3,3), padding = 'same')(x)
-    x = layers.BatchNormalization(axis=3)(x)
-    # Processing Residue with conv(1,1)
-    x_skip = layers.Conv2D(filter, (1,1), strides = (2,2))(x_skip)
-    # Add Residue
-    x = layers.Add()([x, x_skip])     
-    x = layers.Activation('relu')(x)
-    return x
-
-def resnet34(input_shape, classes = 8):
-    # Step 1 (Setup Input Layer)
-    x_input = layers.Input(input_shape)
-    x = layers.ZeroPadding2D((3, 3))(x_input)
-    # Step 2 (Initial Conv layer along with maxPool)
-    x = layers.Conv2D(64, kernel_size=7, strides=2, padding='same')(x)
+# Define the Identity Block
+def identity_block(x, filters):
+    """
+    Identity block for ResNet-34. The output dimensions remain the same as input dimensions.
+    
+    Arguments:
+    x -- Input tensor
+    filters -- Number of filters for the convolutional layers
+    
+    Returns:
+    x -- Output tensor after applying the identity block
+    """
+    shortcut = x  # Save the input for the residual connection
+    
+    # First convolutional layer
+    x = layers.Conv2D(filters, kernel_size=(3, 3), strides=(1, 1), padding='same')(x)
     x = layers.BatchNormalization()(x)
     x = layers.Activation('relu')(x)
-    x = layers.MaxPool2D(pool_size=3, strides=2, padding='same')(x)
-    # Define size of sub-blocks and initial filter size
-    block_layers = [3, 4, 6, 3]
-    filter_size = 64
-    # Step 3 Add the Resnet Blocks
-    for i in range(4):
-        if i == 0:
-            # For sub-block 1 Residual/Convolutional block not needed
-            for j in range(block_layers[i]):
-                x = identity_block(x, filter_size)
-        else:
-            # One Residual/Convolutional Block followed by Identity blocks
-            # The filter size will go on increasing by a factor of 2
-            filter_size = filter_size*2
-            x = convolutional_block(x, filter_size)
-            for j in range(block_layers[i] - 1):
-                x = identity_block(x, filter_size)
-    # Step 4 End Dense Network
-    x = layers.AveragePooling2D((2,2), padding = 'same')(x)
-    x = layers.Flatten()(x)
-    # x = layers.Dense(512, activation = 'relu')(x)
-    x = layers.Dense(classes, activation = 'softmax')(x)
-    model = models.Model(inputs = x_input, outputs = x, name = "resnet34")
+    
+    # Second convolutional layer
+    x = layers.Conv2D(filters, kernel_size=(3, 3), strides=(1, 1), padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    
+    # Add the shortcut connection
+    x = layers.Add()([x, shortcut])
+    x = layers.Activation('relu')(x)
+    
+    return x
 
+# Define the Convolutional Block
+def convolutional_block(x, filters, strides=(2, 2)):
+    """
+    Convolutional block for ResNet-34. It changes the dimensions using strides and the shortcut path.
+    
+    Arguments:
+    x -- Input tensor
+    filters -- Number of filters for the convolutional layers
+    strides -- Strides for the first convolution to downsample
+    
+    Returns:
+    x -- Output tensor after applying the convolutional block
+    """
+    shortcut = x  # Save the input for the residual connection
+    
+    # First convolutional layer with strides
+    x = layers.Conv2D(filters, kernel_size=(3, 3), strides=strides, padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation('relu')(x)
+    
+    # Second convolutional layer
+    x = layers.Conv2D(filters, kernel_size=(3, 3), strides=(1, 1), padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    
+    # Shortcut connection with 1x1 convolution to match dimensions
+    shortcut = layers.Conv2D(filters, kernel_size=(1, 1), strides=strides, padding='same')(shortcut)
+    shortcut = layers.BatchNormalization()(shortcut)
+    
+    # Add the shortcut connection
+    x = layers.Add()([x, shortcut])
+    x = layers.Activation('relu')(x)
+    
+    return x
+
+# Define the ResNet-34 Architecture
+def resnet34(input_shape, classes=8):
+    """
+    Build the ResNet-34 architecture.
+    
+    Arguments:
+    input_shape -- Shape of the input image (height, width, channels)
+    classes -- Number of output classes
+    
+    Returns:
+    model -- A Keras Model instance
+    """
+    # Input layer
+    x_input = layers.Input(input_shape)
+    
+    # Initial Conv Layer + BatchNorm + ReLU + MaxPooling
+    x = layers.ZeroPadding2D((3, 3))(x_input)
+    x = layers.Conv2D(64, kernel_size=(7, 7), strides=(2, 2), padding='valid')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation('relu')(x)
+    x = layers.MaxPool2D(pool_size=(3, 3), strides=(2, 2), padding='same')(x)
+    
+    # Block 1: 3 identity blocks with 64 filters
+    for _ in range(3):
+        x = identity_block(x, 64)
+    
+    # Block 2: 1 convolutional block + 3 identity blocks with 128 filters
+    x = convolutional_block(x, 128, strides=(2, 2))
+    for _ in range(3):
+        x = identity_block(x, 128)
+    
+    # Block 3: 1 convolutional block + 5 identity blocks with 256 filters
+    x = convolutional_block(x, 256, strides=(2, 2))
+    for _ in range(5):
+        x = identity_block(x, 256)
+    
+    # Block 4: 1 convolutional block + 2 identity blocks with 512 filters
+    x = convolutional_block(x, 512, strides=(2, 2))
+    for _ in range(2):
+        x = identity_block(x, 512)
+    
+    # Final Layers: Global Average Pooling + Dense Output Layer
+    x = layers.GlobalAveragePooling2D()(x)
+    x = layers.Dense(classes, activation='softmax')(x)
+    
+    # Create the model
+    model = models.Model(inputs=x_input, outputs=x, name='ResNet34')
+    
     return model
 
 def vgg(input_shape, num_classes=8):
@@ -196,22 +243,22 @@ def vgg(input_shape, num_classes=8):
     # 1st Convolution Layer + Convolution Layer + Pooling
     X = conv2d_bn(X_input, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='1_1')
     X = conv2d_bn(X, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='1_2')
-    X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
+    X = layers.MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='same')(X)
     
     # 2st Convolution Layer + Convolution Layer + Pooling
     X = conv2d_bn(X, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='2_1')
     X = conv2d_bn(X, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='2_2')
-    X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
+    X = layers.MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='same')(X)
 
     # 3st Convolution Layer + Convolution Layer + Pooling
     X = conv2d_bn(X, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='3_1')
     X = conv2d_bn(X, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='3_2')
-    X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
+    X = layers.MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='same')(X)
 
     # 4st Convolution Layer + Convolution Layer + Pooling
     X = conv2d_bn(X, filters=256, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='4_1')
     X = conv2d_bn(X, filters=256, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='4_2')
-    X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
+    X = layers.MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='same')(X)
 
     # Flatten the output to feed into the Dense layer
     X = layers.Flatten()(X)
@@ -227,7 +274,7 @@ def vgg(input_shape, num_classes=8):
 
     return model
 
-def autoencoder(input_shape, latent_dim=32):
+def autoencoder(input_shape, latent_dim=64):
     """
     Build an autoencoder-like architecture
     """
@@ -235,14 +282,14 @@ def autoencoder(input_shape, latent_dim=32):
     encoder_input = layers.Input(shape=input_shape, name="encoder_input")
 
     X = conv2d_bn(encoder_input, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='elu', name='encoder_1')
-    X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
+    X = layers.MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='same')(X)
     X = conv2d_bn(X, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='elu', name='encoder_2')
-    X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
+    X = layers.MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='same')(X)
     X = conv2d_bn(X, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='elu', name='encoder_3')
-    X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
+    X = layers.MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='same')(X)
     X = conv2d_bn(X, filters=256, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='elu', name='encoder_4')
-    X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
-    
+    X = layers.MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='same')(X)
+
     X = layers.Flatten()(X)
     latent_output = layers.Dense(latent_dim, name="latent_output")(X)
 
@@ -269,10 +316,9 @@ def autoencoder(input_shape, latent_dim=32):
 
     return encoder, decoder, autoencoder
 
-
 def autoclassifier(encoder, num_classes=8):
     """
-    Build a classifier using the encoder part of the autoencoders and a CNN-like architecture. We set 
+    Build a classifier using the encoder part of the autoencoders and a CNN-like architecture. We set
     encoder.trainable = False so that we do not have to train again the encoder.
     """
     # Freeze encoder weights if needed
@@ -282,20 +328,35 @@ def autoclassifier(encoder, num_classes=8):
     classifier_input = encoder.input
     X = encoder.output
 
-    # Reshape latent features to 2D 
-    X = layers.Reshape((4, 4, 2))(X)  # Remember we choose 32 features 
+    # Reshape latent features to 2D
+    X = layers.Reshape((2,2,16))(X)  # Remember we choose 64 features
 
     # 1st Convolution Layer + Pooling
-    X = conv2d_bn(X, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='class_1')
+    X = conv2d_bn(X, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='class_1')
     X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
 
     # 2nd Convolution Layer + Pooling
-    X = conv2d_bn(X, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='class_2')
+    X = conv2d_bn(X, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='class_2')
     X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
+
+    # 3rd Convolution Layer + Pooling
+    X = conv2d_bn(X, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='class_3')
+    X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
+
+    # 4th Convolution Layer + Pooling
+    X = conv2d_bn(X, filters=256, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='class_4')
+    X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
+
+    # 5th Convolution Layer + Pooling
+    X = conv2d_bn(X, filters=512, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='class_5')
+    X = layers.MaxPooling2D(pool_size=(2,2), strides=(1,1), padding='same')(X)
+
 
     # Fully connected layers
     X = layers.Flatten()(X)
     # X = layers.Dense(512, activation='relu')(X)
+    X = layers.Dropout(0.3)(X)
+
     X = layers.Dense(num_classes, activation='softmax', name="classifier_output")(X)
 
     # Create the model
@@ -601,6 +662,44 @@ def inception(input_shape, num_classes=8):
 
     return model
 
+def vgg8(input_shape, num_classes=8):
+    """
+    Creates a VGG-like architecture
+    """
+    X_input = layers.Input(input_shape)
+
+    # 1st layer
+    X = conv2d_bn(X_input, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='1_1')
+    X = conv2d_bn(X, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='1_2')
+    X = layers.MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='same')(X)
+    
+    # 2nd layer
+    X = conv2d_bn(X, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='2_1')
+    X = conv2d_bn(X, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='2_2')
+    X = layers.MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='same')(X)
+
+    # 3rd layer
+    X = conv2d_bn(X, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='3_1')
+    X = conv2d_bn(X, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='3_2')
+    X = layers.MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='same')(X)
+
+    # Flatten the output to feed into the Dense layer
+    X = layers.Flatten()(X)
+
+    # Fully Connected Layer
+    X = layers.Dense(512, activation='relu')(X)
+    X = layers.Dropout(0.2)(X)
+    X = layers.Dense(256, activation='relu')(X)
+    X = layers.Dropout(0.2)(X)
+
+    # Output Layer
+    X = layers.Dense(num_classes, activation='softmax')(X)
+
+    # Create the model
+    model = models.Model(inputs = X_input, outputs = X, name='vgg8')
+
+    return model
+
 def vgg12(input_shape, num_classes=8):
     """
     Creates a VGG-like architecture
@@ -632,17 +731,16 @@ def vgg12(input_shape, num_classes=8):
     X = layers.Flatten()(X)
 
     # Fully Connected Layer
-    X = layers.Dense(1024, activation='relu')(X)
-    X = layers.Dropout(0.3)(X)
-    X = layers.Dense(1024, activation='relu')(X)
-    X = layers.Dropout(0.3)(X)
+    X = layers.Dense(512, activation='relu')(X)
+    X = layers.Dropout(0.2)(X)
     X = layers.Dense(256, activation='relu')(X)
+    X = layers.Dropout(0.2)(X)
 
     # Output Layer
     X = layers.Dense(num_classes, activation='softmax')(X)
 
     # Create the model
-    model = models.Model(inputs = X_input, outputs = X, name='vgg')
+    model = models.Model(inputs = X_input, outputs = X, name='vgg12')
 
     return model
 
@@ -683,17 +781,16 @@ def vgg15(input_shape, num_classes=8):
     X = layers.Flatten()(X)
 
     # Fully Connected Layer
-    X = layers.Dense(1024, activation='relu')(X)
-    X = layers.Dropout(0.5)(X)
-    X = layers.Dense(1024, activation='relu')(X)
-    X = layers.Dropout(0.5)(X)
+    X = layers.Dense(512, activation='relu')(X)
+    X = layers.Dropout(0.2)(X)
     X = layers.Dense(256, activation='relu')(X)
+    X = layers.Dropout(0.2)(X)
 
     # Output Layer
     X = layers.Dense(num_classes, activation='softmax')(X)
 
     # Create the model
-    model = models.Model(inputs = X_input, outputs = X, name='vgg')
+    model = models.Model(inputs = X_input, outputs = X, name='vgg15')
 
     return model
 
@@ -740,18 +837,412 @@ def vgg18(input_shape, num_classes=8):
     X = layers.Flatten()(X)
 
     # Fully Connected Layer
-    X = layers.Dense(1024, activation='relu')(X)
-    X = layers.Dropout(0.3)(X)
-    X = layers.Dense(1024, activation='relu')(X)
-    X = layers.Dropout(0.3)(X)
+    X = layers.Dense(512, activation='relu')(X)
+    X = layers.Dropout(0.2)(X)
     X = layers.Dense(256, activation='relu')(X)
+    X = layers.Dropout(0.2)(X)
 
     # Output Layer
     X = layers.Dense(num_classes, activation='softmax')(X)
 
     # Create the model
-    model = models.Model(inputs = X_input, outputs = X, name='vgg')
+    model = models.Model(inputs = X_input, outputs = X, name='vgg18')
 
     return model
+
+
+##### ATTENTION BASED MODELS
+
+# Channel Attetion Module
+def channel_attention(input_tensor, reduction_ratio=8):
+    """
+    Channel Attention module.
+    Args:
+        input_tensor: Input feature map.
+        reduction_ratio: Reduction ratio for the dense layers.
+    Returns:
+        Attention weighted feature map.
+    """
+    channels = input_tensor.shape[-1]
+
+    # Global Average Pooling
+    avg_pool = layers.GlobalAveragePooling2D()(input_tensor)
+    avg_pool = layers.Dense(channels // reduction_ratio, activation='relu', use_bias=False)(avg_pool)
+    avg_pool = layers.Dense(channels, use_bias=False)(avg_pool)
+
+    # Global Max Pooling
+    max_pool = layers.GlobalMaxPooling2D()(input_tensor)
+    max_pool = layers.Dense(channels // reduction_ratio, activation='relu', use_bias=False)(max_pool)
+    max_pool = layers.Dense(channels, use_bias=False)(max_pool)
+
+    # Combine and apply sigmoid activation
+    attention = layers.Add()([avg_pool, max_pool])
+    attention = layers.Activation('sigmoid')(attention)
+    attention = layers.Reshape((1, 1, channels))(attention)
+
+    return layers.Multiply()([input_tensor, attention])
+
+# Spatial Attention Module
+class SpatialAttention(tf.keras.layers.Layer):
+    def __init__(self, kernel_size=7, **kwargs):  # Add **kwargs to accept extra arguments
+        super(SpatialAttention, self).__init__(**kwargs)  # Pass **kwargs to the superclass
+        self.kernel_size = kernel_size
+        
+
+    def build(self, input_shape):
+        self.conv = tf.keras.layers.Conv2D(
+            filters=1,
+            kernel_size=self.kernel_size,
+            strides=1,
+            padding='same',
+            activation='sigmoid',
+            kernel_initializer='he_normal',
+            use_bias=False
+        )
+        super(SpatialAttention, self).build(input_shape)
+
+    def call(self, inputs):
+        avg_pool = tf.keras.layers.Lambda(lambda x: tf.keras.backend.mean(x, axis=3, keepdims=True))(inputs)
+        max_pool = tf.keras.layers.Lambda(lambda x: tf.keras.backend.max(x, axis=3, keepdims=True))(inputs)
+
+        concat = tf.keras.layers.Concatenate(axis=3)([avg_pool, max_pool])
+        spatial_attention = self.conv(concat)
+
+        return tf.keras.layers.Multiply()([inputs, spatial_attention])
+    
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'kernel_size': self.kernel_size,
+        })
+        return config
+    
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)  # Create instance with loaded config
+
+## CNN  
+
+# Channel Attention + CNN
+def SE_CNN(input_shape=(64, 64, 3), num_classes=8):
+    """
+    CNN Architecture with Attention Mechanism for 64x64x3 images.
+    """
+    inputs = layers.Input(shape=input_shape)
+
+    # Convolutional Block 1
+    x = conv2d_bn(inputs, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='1_1')
+
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 1
+    x = channel_attention(x)
+
+    # Convolutional Block 2
+    x = conv2d_bn(x, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='2_1')
+    
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 2
+    x = channel_attention(x)
+
+    # Convolutional Block 3
+    x = conv2d_bn(x, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='3_1')
+
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 3
+    x = channel_attention(x)
+
+    # Convolutional Block 4
+    x = conv2d_bn(x, filters=256, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='4_1')
+    
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 4
+    x = channel_attention(x)
+    
+    # # Flatten and Fully Connected Layers
+    x = layers.Flatten()(x)
+
+    x = layers.Dropout(0.2)(x)
+
+    # Output Layer
+    outputs = layers.Dense(num_classes, activation='softmax')(x)
+
+    # Create the model
+    model = models.Model(inputs=inputs, outputs=outputs, name="SE_CNN")
+    return model
+
+# Spatial Attention + CNN
+def SA_CNN(input_shape=(64, 64, 3), num_classes=8):
+    """
+    CNN Architecture with Attention Mechanism for 64x64x3 images.
+    """
+    inputs = layers.Input(shape=input_shape)
+
+    # Convolutional Block 1
+    x = conv2d_bn(inputs, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='1_1')
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 1
+    x = SpatialAttention()(x)
+
+    # Convolutional Block 2
+    x = conv2d_bn(x, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='2_1')
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 2
+    x = SpatialAttention()(x)
+
+    # Convolutional Block 3
+    x = conv2d_bn(x, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='3_1')
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 3
+    x = SpatialAttention()(x)
+
+    # Convolutional Block 4
+    x = conv2d_bn(x, filters=256, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='4_1')
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 4
+    x = SpatialAttention()(x)
+
+    # # Flatten and Fully Connected Layers
+    x = layers.Flatten()(x)
+
+    x = layers.Dropout(0.2)(x)
+
+    # Output Layer
+    outputs = layers.Dense(num_classes, activation='softmax')(x)
+
+    # Create the model
+    model = models.Model(inputs=inputs, outputs=outputs, name="SA_CNN")
+    return model
+
+# Channel Attention + Spatial Attention + CNN
+def CBAM_CNN(input_shape=(64, 64, 3), num_classes=8):
+    """
+    CNN Architecture with Attention Mechanism for 64x64x3 images.
+    """
+    inputs = layers.Input(shape=input_shape)
+
+    # Convolutional Block 1
+    x = conv2d_bn(inputs, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='1_1')
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 1
+    x = channel_attention(x)  # Apply Channel Attention
+    x = SpatialAttention()(x)  # Apply Spatial Attention
+
+    # Convolutional Block 2
+    x = conv2d_bn(x, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='2_1')
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 2
+    x = channel_attention(x)  # Apply Channel Attention
+    x = SpatialAttention()(x)  # Apply Spatial Attention
+
+    # Convolutional Block 3
+    x = conv2d_bn(x, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='3_1')
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 3
+    x = channel_attention(x)  # Apply Channel Attention
+    x = SpatialAttention()(x)  # Apply Spatial Attention
+
+    # Convolutional Block 4
+    x = conv2d_bn(x, filters=256, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='4_1')
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 4
+    x = channel_attention(x)  # Apply Channel Attention
+    x = SpatialAttention()(x)  # Apply Spatial Attention
+
+    # # Flatten and Fully Connected Layers
+    x = layers.Flatten()(x)
+    x = layers.Dropout(0.2)(x)
+
+    # Output Layer
+    outputs = layers.Dense(num_classes, activation='softmax')(x)
+
+    # Create the model
+    model = models.Model(inputs=inputs, outputs=outputs, name="CBAM_CNN")
+    return model
+
+## VGG
+
+# Channel Attention + VGG15
+def SE_VGG15(input_shape=(64, 64, 3), num_classes=8):
+    """
+    VGG Architecture with Attention Mechanism for 64x64x3 images.
+    """
+    inputs = layers.Input(shape=input_shape)
+
+    # Convolutional Block 1
+    x = conv2d_bn(inputs, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='1_1')
+    x = conv2d_bn(x, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='1_2')
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 1
+    x = channel_attention(x)
+
+    # Convolutional Block 2
+    x = conv2d_bn(x, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='2_1')
+    x = conv2d_bn(x, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='2_2')
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 2
+    x = channel_attention(x)
+
+    # Convolutional Block 3
+    x = conv2d_bn(x, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='3_1')
+    x = conv2d_bn(x, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='3_2')
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 3
+    x = channel_attention(x)
+
+    # Convolutional Block 4
+    x = conv2d_bn(x, filters=256, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='4_1')
+    x = conv2d_bn(x, filters=256, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='4_2')
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 4
+    x = channel_attention(x)
+
+    # 5th layer
+    x = conv2d_bn(x, filters=512, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='5_1')
+    x = conv2d_bn(x, filters=512, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='5_2')
+    x = conv2d_bn(x, filters=512, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='5_3')
+    x = layers.MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='same')(x)
+
+    # Apply Attention after Block 5
+    x = channel_attention(x)
+
+    # Flatten and Fully Connected Layers
+    x = layers.Flatten()(x)
+    x = layers.Dropout(0.2)(x)
+
+    # Output Layer
+    outputs = layers.Dense(num_classes, activation='softmax')(x)
+
+    # Create the model
+    model = models.Model(inputs=inputs, outputs=outputs, name="SE_VGG15")
+    return model
+
+
+# Spatial Attention + VGG15
+def SA_VGG15(input_shape=(64, 64, 3), num_classes=8):
+    """
+    VGG Architecture with Attention Mechanism for 64x64x3 images.
+    """
+    inputs = layers.Input(shape=input_shape)
+
+    # Convolutional Block 1
+    x = conv2d_bn(inputs, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='1_1')
+    x = conv2d_bn(x, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='1_2')
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 1
+    x = SpatialAttention()(x)
+
+    # Convolutional Block 2
+    x = conv2d_bn(x, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='2_1')
+    x = conv2d_bn(x, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='2_2')
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 2
+    x = SpatialAttention()(x)
+
+    # Convolutional Block 3
+    x = conv2d_bn(x, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='3_1')
+    x = conv2d_bn(x, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='3_2')
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 3
+    x = SpatialAttention()(x)
+
+    # Convolutional Block 4
+    x = conv2d_bn(x, filters=256, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='4_1')
+    x = conv2d_bn(x, filters=256, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='4_2')
+    x = layers.MaxPooling2D((2, 2))(x)
+
+    # Apply Attention after Block 4
+    x = SpatialAttention()(x)
+
+    # 5th layer
+    x = conv2d_bn(x, filters=512, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='5_1')
+    x = conv2d_bn(x, filters=512, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='5_2')
+    x = conv2d_bn(x, filters=512, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='5_3')
+    x = layers.MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='same')(x)
+
+    # Apply Attention after Block 5
+    x = SpatialAttention()(x)
+
+    # Flatten and Fully Connected Layers
+    x = layers.Flatten()(x)
+    x = layers.Dropout(0.2)(x)
+
+    # Output Layer
+    outputs = layers.Dense(num_classes, activation='softmax')(x)
+
+    # Create the model
+    model = models.Model(inputs=inputs, outputs=outputs, name="SA_VGG15")
+    return model
+
+# Channel Attention + Spatial Attention + VGG15
+def CBAM_VGG15(input_shape=(64, 64, 3), num_classes=8):
+    inputs = layers.Input(shape=input_shape)
+
+    # Convolutional Block 1
+    x = conv2d_bn(inputs, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='1_1')
+    x = conv2d_bn(x, filters=32, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='1_2')
+    x = layers.MaxPooling2D((2, 2))(x)
+    x = channel_attention(x)  # Apply Squeeze-and-Excitation
+    x = SpatialAttention()(x)  # Apply Spatial Attention
+
+    # Convolutional Block 2
+    x = conv2d_bn(x, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='2_1')
+    x = conv2d_bn(x, filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='2_2')
+    x = layers.MaxPooling2D((2, 2))(x)
+    x = channel_attention(x)  # Apply Squeeze-and-Excitation
+    x = SpatialAttention()(x)  # Apply Spatial Attention
+
+    # Convolutional Block 3
+    x = conv2d_bn(x, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='3_1')
+    x = conv2d_bn(x, filters=128, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='3_2')
+    x = layers.MaxPooling2D((2, 2))(x)
+    x = channel_attention(x)  # Apply Squeeze-and-Excitation
+    x = SpatialAttention()(x)  # Apply Spatial Attention
+
+    # Convolutional Block 4
+    x = conv2d_bn(x, filters=256, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='4_1')
+    x = conv2d_bn(x, filters=256, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='4_2')
+    x = layers.MaxPooling2D((2, 2))(x)
+    x = channel_attention(x)  # Apply Squeeze-and-Excitation
+    x = SpatialAttention()(x)  # Apply Spatial Attention
+
+    # 5th layer
+    x = conv2d_bn(x, filters=512, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='5_1')
+    x = conv2d_bn(x, filters=512, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='5_2')
+    x = conv2d_bn(x, filters=512, kernel_size=(3, 3), strides=(1, 1), padding='same', activation='relu', name='5_3')
+    x = layers.MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='same')(x)
+    x = channel_attention(x)  # Apply Squeeze-and-Excitation
+    x = SpatialAttention()(x)  # Apply Spatial Attention
+
+    # Flatten and Fully Connected Layers
+    x = layers.Flatten()(x)
+
+    x = layers.Dropout(0.2)(x)
+
+    # Output Layer
+    outputs = layers.Dense(num_classes, activation='softmax')(x)
+
+    # Define the model
+    model = models.Model(inputs=inputs, outputs=outputs, name='CBAM_VGG15')
+    return model
+
 
 

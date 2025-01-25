@@ -62,6 +62,7 @@ def train_adam(model, train_dataset, val_dataset, test_dataset, epochs=50, learn
     plt.title('Model Accuracy')
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy')
+    plt.grid(True)
     plt.legend()
 
     # Plot training & validation loss values
@@ -71,6 +72,7 @@ def train_adam(model, train_dataset, val_dataset, test_dataset, epochs=50, learn
     plt.title('Model Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
+    plt.grid(True)
     plt.legend()
 
 
@@ -131,6 +133,7 @@ def train_sgd(model, train_dataset, val_dataset, test_dataset, epochs=50, learni
     plt.title('Model Accuracy')
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy')
+    plt.grid(True)
     plt.legend()
 
     # Plot training & validation loss values
@@ -140,6 +143,7 @@ def train_sgd(model, train_dataset, val_dataset, test_dataset, epochs=50, learni
     plt.title('Model Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
+    plt.grid(True)
     plt.legend()
 
 
@@ -192,6 +196,7 @@ def train_autoencoder(model, train_dataset, val_dataset, epochs=50, learning_rat
     plt.title('Model MAE')
     plt.xlabel('Epoch')
     plt.ylabel('Mean Absolute Error')
+    plt.grid(True)
     plt.legend()
 
     plt.subplot(1, 2, 2)
@@ -200,6 +205,7 @@ def train_autoencoder(model, train_dataset, val_dataset, epochs=50, learning_rat
     plt.title('Model Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
+    plt.grid(True)
     plt.legend()
     plt.show()
 
